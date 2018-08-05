@@ -1,160 +1,200 @@
 package com.prs.api;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.TimeZone;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.Consumes;
-import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.Response.Status;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fps.api.FPSDao;
+import com.fps.constants.APIStatus;
+import com.fps.models.Event;
+import com.fps.models.Member;
+import com.fps.models.Pong;
+import com.fps.util.APIUtils;
+import com.fps.util.Util;
 
-@Path("/")
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
+import io.swagger.annotations.ApiResponse;
+import io.swagger.annotations.ApiResponses;
+
+@Path("/v1")
+@Api(value = "/v1")
 public class API {
-	
 
-	public ArrayList<String> bannedIps = new ArrayList<String>();
-	
+  @ApiOperation("Handle ping request from client")
+  @ApiResponses({@ApiResponse(code = 200, message = "OK: pong", response = Pong.class)})
+  @GET
+  @Path("/ping")
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response ping(@Context HttpServletRequest request) {
+    String timeStamp =
+        new SimpleDateFormat("yyyy-MM-dd:HH:mm:ss").format(Calendar.getInstance().getTime());
+    Pong p = new Pong(request.getRemoteAddr(), timeStamp, "pong");
+    return Response.ok(p).build();
+  }
 
-	
-	@POST
-	@Path("/text")
-	@Produces("application/json")
-	@Consumes("application/json")
-	public Response sendJRelayTest(@QueryParam("client-id") int clientId,String test){
-		User client = relay.instance.users.get(clientId);
-		
-		Response response = new Response();
-		if(client==null){
-			response.setMessage("There is no client with the specified id currently connected");
-		}else{
-			try{
-				PacketEvent pe = new PacketEvent(client);
-				pe.text("", test);
-				response.setSuccess(true);
-			}catch(Exception e){
-				response.setMessage(e.getMessage());
-			}
-			
-		}
-		return response;
-	}
-	@POST
-	@Path("/start")
-	@Produces("application/json")
-	@Consumes("application/json")
-	public Response startRelay() {
+  @GET
+  @Path("/member/{member_id}")
+  @Produces("application/json")
+  @ApiOperation(
+      value = "Find a Member by ID.",
+      notes = "Returns the Member associated with the ID passed.",
+      response = Member.class)
+  @ApiResponses({
+    @ApiResponse(code = 200, message = "Member retrieved succesfully.", response = Member.class),
+    @ApiResponse(
+        code = 400,
+        message = "Member not found.",
+        response = WebApplicationException.class)
+  })
+  public Response getMemberById(
+      @Context HttpServletRequest request,
+      @ApiParam(value = "ID of the Member to be retrieved.", required = true)
+          @PathParam("member_id")
+          int memberId)
+      throws WebApplicationException {
+    Member mem = FPSDao.fpMemberService.getMemberById(memberId);
+    if (mem != null) {
+      return Response.ok("Member retrieved succesfully")
+          .entity(FPSDao.fpMemberService.getMemberById(memberId))
+          .build();
+    } else {
+      throw APIUtils.buildWebApplicationException(
+          Status.BAD_REQUEST,
+          APIStatus.ERROR,
+          "Member not found",
+          "The Member ID supplied does not match any existing members.");
+    }
+  }
 
-		Response response = new Response();
+  @GET
+  @Path("/event/{event_id}")
+  @Produces("application/json")
+  @ApiOperation(
+      value = "Find an Event by ID",
+      notes = "Returns the Event associated with the ID passed",
+      response = Event.class)
+  public Response getEventById(
+      @Context HttpServletRequest request,
+      @ApiParam(value = "ID of the Event to be retrieved", required = true) @PathParam("event_id")
+          int eventId) {
+    return Response.ok("Event retrieved succesfully")
+        .entity(FPSDao.fpEventService.getEventById(eventId))
+        .build();
+  }
 
-		try {
-			relay.main(null);
-			response.setSuccess(true);
-		} catch (Exception e) {
-			response.setMessage(e.getMessage());
-		}
+  @GET
+  @Path("/event/{event_id}/members")
+  @Produces("application/json")
+  @ApiOperation(
+      value = "List the Members associated with an event",
+      notes = "Returns the Member's associated with the Event ID passed",
+      response = List.class)
+  public Response getEventMembersById(
+      @Context HttpServletRequest request,
+      @ApiParam(value = "ID of the Event to be retrieved", required = true) @PathParam("event_id")
+          int eventId) {
+    List<Integer> memberIds = FPSDao.fpEventService.getUserIdsByEvent(eventId);
+    List<Member> members = new ArrayList<Member>();
+    for (int i : memberIds) {
+      members.add(FPSDao.fpMemberService.getMemberById(i));
+    }
 
-		return response;
-	}
-	@POST
-	@Path("/sols")
-	@Produces("application/json")
-	@Consumes(MediaType.APPLICATION_JSON)
-	public Response newSol(@Context HttpServletRequest request,SolDataRequest sd) {
-		boolean success = false;
-		Response response = new Response();
-		//IF THIS IP ALREADY HAS CALLED THE SERVICE
-		if(bannedIps.contains(request.getRemoteAddr())){
-			response.setMessage("You're Like Super Banned Sorry Maybe Use A VPN Or Try Not Being A Fucking Queer");
-			response.setSuccess(false);
-			return response;
-		}
-		if(requests.get(request.getRemoteAddr()).getSpamCount()==MAXIMUM_SPAM_REQUESTS){
-			bannedIps.add(request.getRemoteAddr());
-		}
-		
-		if(requests.containsKey(request.getRemoteAddr())){
-			long requestDif = System.currentTimeMillis()-requests.get(request.getRemoteAddr()).getLastRequest();
-			if(requestDif<50){
-				requests.get(request.getRemoteAddr()).setSpamCount(requests.get(request.getRemoteAddr()).getSpamCount()+1);
-				response.setMessage("Strop Trying To Spam You Nig, You Now Have "+(MAXIMUM_SPAM_REQUESTS-requests.get(request.getRemoteAddr()).getSpamCount())+" Attempts Left");
-				response.setSuccess(false);
-				return response;
-			}else{
-				requests.get(request.getRemoteAddr()).setLastRequest(System.currentTimeMillis());
-				EmailSender.send(sd.getDestinationEmail(), SolDataInsert.formatData(sd));
-			}
-			
-			
-		}else{
-			//NEW IP :D
-			requests.put(request.getRemoteAddr(), new Request(System.currentTimeMillis()));
-		}
-		
-		
-		
-		
-		
-		long utcDate = Calendar.getInstance(TimeZone.getTimeZone("UTC")).MILLISECOND;
-		if(Math.abs(utcDate-sd.getTimeStamp())<1000 ){
-			
-			
-			try {
-				//success = insert.addSol(sd);
-				response.setMessage("Succesfully Logged New Sol Data From " + sd.getIp()
-						+ " At Time " + sd.getTimeStamp());
-			} catch (Exception e) {
-				response.setMessage(e.getMessage());
-				e.printStackTrace();
-			}
-			response.setSuccess(success);
-		}else{
-			response.setMessage("Your Request Was Not Valid Fuck Off");
-		}
-		ObjectMapper mapper = new ObjectMapper();
-		String s = "";
-		try {
-			s = mapper.writeValueAsString(response);
-		} catch (JsonProcessingException e) {
-			
-			e.printStackTrace();
-		}
-		System.out.println(s);
-		return response;
-	}
-	@POST
-	@Path("/validate")
-	@Produces("application/json")
-	@Consumes("application/json")
-	public Response validateMemberId(@Context HttpServletRequest request,  @QueryParam("member-id") String memberId) {
-		UserManager manager = new UserManager();
-		
-		Response r = new Response();
-		boolean success = manager.checkMemberId(memberId);
-		if(success){
-			r.setSuccess(true);
-			r.setMessage("Successfully Validated Member ID");
-		}else{
-			r.setSuccess(false);
-			r.setMessage("Unable To Validate Member ID");
-		}
-		
-		return r;
-		
-	}
-	
-	
+    return Response.ok("Event Members retrieved succesfully").entity(members).build();
+  }
+
+  @GET
+  @Path("/calendar/{calendar_id}")
+  @Produces("application/json")
+  @ApiOperation(
+      value = "Find a Calendar by ID",
+      notes = "Returns the Calendar associated with the ID passed",
+      response = Event.class)
+  public Response getCalendarById(
+      @Context HttpServletRequest request,
+      @ApiParam(value = "ID of the Calendar to be retrieved", required = true)
+          @PathParam("calendar_id")
+          int calendarId) {
+    com.fps.models.Calendar ca = FPSDao.fpCalendarService.getCalendarById(calendarId);
+    ca.setEvents(FPSDao.fpCalendarService.getCalendarEventsById(calendarId));
+    ca.setMembers(FPSDao.fpCalendarService.getCalendarMembersById(calendarId));
+    return Response.ok("Calendar retrieved succesfully").entity(ca).build();
+  }
+
+  @POST
+  @Path("/member/{member_id}/update")
+  @ApiOperation(
+      value = "Update a Member's data",
+      notes = "Updates Member data based on the parameters passed",
+      response = Event.class)
+  @Consumes("application/json")
+  public Response updateMember(
+      @Context HttpServletRequest request,
+      @ApiParam(value = "ID of the Member to be updated", required = true) @PathParam("member_id")
+          int memberId,
+      @QueryParam("first_name") String firstName,
+      @QueryParam("last_name") String lastName,
+      @QueryParam("username") String username,
+      @QueryParam("dob") String dob,
+      @QueryParam("phone") String phone,
+      @QueryParam("email") String email) {
+    int updated = -1;
+
+    if (firstName != null) {
+      updated = FPSDao.fpMemberService.updateMemberFirstName(memberId, firstName);
+    }
+
+    if (lastName != null) {
+      updated = FPSDao.fpMemberService.updateMemberLastName(memberId, lastName);
+    }
+
+    if (dob != null) {
+      updated = FPSDao.fpMemberService.updateMemberDOB(memberId, Util.parseDateSimple(dob));
+    }
+
+    if (phone != null) {
+      updated = FPSDao.fpMemberService.updateMemberPhone(memberId, phone);
+    }
+
+    if (email != null) {
+      updated = FPSDao.fpMemberService.updateMemberEmail(memberId, email);
+    }
+
+    if (username != null) {
+      updated = FPSDao.fpMemberService.updateMemberUsername(memberId, username);
+    }
+
+    if (updated > 0) {
+      return Response.ok("Member update successful").build();
+    } else {
+      return Response.ok("Member update unsucessful").build();
+    }
+  }
+  //
+  //  @POST
+  //  @Path("/event/{event_id}/update")
+  //  @Produces("application/json")
+  //  @Consumes("application/json")
+  //  public void updateEvent(
+  //      @Context HttpServletRequest request,
+  //      @PathParam("event_id") int eventId,
+  //      @QueryParam("date") String date,
+  //      @QueryParam("type") EventType type,
+  //      @QueryParam("description") String launchCount) {}
 }

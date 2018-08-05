@@ -19,6 +19,7 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
+import com.fps.api.FPSDao;
 import com.fps.constants.APIStatus;
 import com.fps.models.Event;
 import com.fps.models.Member;
