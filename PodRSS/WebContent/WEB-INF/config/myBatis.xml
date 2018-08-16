@@ -10,9 +10,9 @@ PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
    
   </settings>
   <typeHandlers>
-        <typeHandler handler="org.apache.ibatis.type.EnumOrdinalTypeHandler" javaType="com.fps.constants.EventType"/>
+        <!-- <typeHandler handler="org.apache.ibatis.type.EnumOrdinalTypeHandler" javaType="com.fps.constants.EventType"/>
         <typeHandler handler="org.apache.ibatis.type.EnumOrdinalTypeHandler" javaType="com.fps.constants.Requirement"/>
         <typeHandler handler="org.apache.ibatis.type.EnumOrdinalTypeHandler" javaType="com.fps.constants.Role"/>
-        <typeHandler handler="org.apache.ibatis.type.EnumOrdinalTypeHandler" javaType="com.fps.constants.Outcome"/>
+        <typeHandler handler="org.apache.ibatis.type.EnumOrdinalTypeHandler" javaType="com.fps.constants.Outcome"/> -->
 </typeHandlers>
 </configuration>

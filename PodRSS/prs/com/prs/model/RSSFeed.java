@@ -185,9 +185,11 @@ public class RSSFeed implements SyndFeed {
     }
 
     public void setTitle(SyndContent title) {
+	
     }
 
     public void setDescription(SyndContent description) {
+	
     }
 
     public void setFeedType(String feedType) {
@@ -332,7 +334,6 @@ public class RSSFeed implements SyndFeed {
 
     @Override
     public String getDescription() {
-	// TODO Auto-generated method stub
 	return null;
     }
 
